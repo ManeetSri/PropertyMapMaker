@@ -1,0 +1,169 @@
+:root {
+  --line: #ccd3da;
+  --ink: #17202a;
+  --muted: #697580;
+  --panel: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Arial, sans-serif;
+  background: #eef1f4;
+  color: var(--ink);
+  overflow: hidden;
+}
+
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* Toolbar is auto-height and wraps freely; the canvas measures the space that
+   is actually left over rather than assuming a fixed 64px. */
+.toolbar {
+  flex: 0 0 auto;
+  background: var(--panel);
+  border-bottom: 1px solid #cbd2d9;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px #0001;
+  position: relative;
+  z-index: 5;
+  flex-wrap: wrap;
+}
+
+.group { display: flex; align-items: center; gap: 5px; }
+
+button, .fileBtn {
+  border: 1px solid #b9c2cc;
+  background: #fff;
+  border-radius: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+button:hover:not(:disabled), .fileBtn:hover { background: #f1f4f7; }
+button:disabled { opacity: .45; cursor: default; }
+.active { background: #e5f0ff !important; border-color: #5898e8; }
+.danger { color: #a11; }
+.fileBtn input { display: none; }
+.zoomText { min-width: 52px; text-align: center; font-size: 13px; }
+.saveStatus { margin-left: auto; font-size: 12px; color: var(--muted); min-height: 16px; }
+
+.workspace { flex: 1 1 auto; position: relative; display: flex; min-height: 0; overflow: hidden; }
+
+.canvasWrap { flex: 1 1 auto; position: relative; background: #dfe3e7; min-width: 0; }
+.canvasWrap canvas { display: block; }
+
+/* The panel is a real column, not an overlay, so it can no longer cover the
+   right-hand side of the plot. */
+.panel {
+  flex: 0 0 292px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.panelToggle {
+  position: absolute;
+  top: 10px;
+  right: 0;
+  z-index: 4;
+  border-radius: 7px 0 0 7px;
+  padding: 6px 8px;
+  box-shadow: 0 2px 8px #0002;
+}
+.panelToggle.shifted { right: 292px; }
+
+.panelSection { border: 1px solid var(--line); border-radius: 10px; padding: 11px; }
+.panelHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.panelHead h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 7px; }
+.badge { background: #eaf1fb; color: #2b6cb0; border-radius: 20px; padding: 1px 8px; font-size: 11px; font-weight: 500; }
+
+.field { display: block; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.field span { display: block; margin-bottom: 3px; }
+.field input {
+  width: 100%;
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--ink);
+  background: #fff;
+}
+.field input[type=color] { height: 32px; padding: 2px; }
+.field input[type=range] { padding: 0; }
+.fieldRow { display: flex; gap: 8px; }
+.fieldRow .field { flex: 1 1 0; min-width: 0; }
+
+.checkRow { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); margin-top: 9px; }
+.checkRow input { width: auto; }
+
+.btnRow { display: flex; gap: 5px; margin-top: 11px; }
+.btnRow button { flex: 1 1 auto; padding: 6px 6px; }
+
+.iconBtn { border: none; background: transparent; padding: 3px 5px; font-size: 13px; }
+.iconBtn:hover { background: #eef2f6; }
+
+.objectList { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; }
+.objectList li { display: flex; align-items: center; gap: 2px; border-radius: 6px; }
+.objectList li.selected { background: #e5f0ff; }
+.rowMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 5px 6px;
+}
+.rowMain:hover { background: transparent; }
+.rowType { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); flex: 0 0 auto; }
+.rowLabel { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Overlaid input for double-click-to-rename on the canvas. */
+.labelEditor {
+  position: absolute;
+  z-index: 8;
+  resize: none;
+  border: 2px solid #1677ff;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-family: inherit;
+  line-height: 1.2;
+  background: #fff;
+  color: var(--ink);
+  overflow: hidden;
+}
+
+.status {
+  position: fixed;
+  left: 12px;
+  bottom: 10px;
+  background: #fffddf;
+  border: 1px solid #e5d98d;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  z-index: 6;
+  max-width: 62vw;
+}
+
+.crash { padding: 40px; max-width: 620px; font-size: 14px; }
+.crash pre { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 10px; white-space: pre-wrap; }
+
+/* Narrow windows: keep the side panel from eating the canvas. */
+@media (max-width: 860px) {
+  .panel { flex-basis: 236px; padding: 9px; }
+  .panelToggle.shifted { right: 236px; }
+  .status { max-width: 88vw; font-size: 11px; padding: 5px 8px; }
+}
