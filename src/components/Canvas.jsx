@@ -12,8 +12,8 @@ import {
   toFeet
 } from "../model/geometry.js";
 import { useStageSize } from "../hooks/useStageSize.js";
+import { collectSnapTargets, snapBox, snapPoint } from "../model/snap.js";
 
-const SNAP_PX = 6;
 const GUIDE_COLOR = "#e8437a";
 const DRAFT_COLOR = "#1677ff";
 const CLOSE_PX = 10;
@@ -39,6 +39,8 @@ export default function Canvas({
   snapEnabled,
   gridEnabled,
   gridSize,
+  snapPx = 6,
+  readOnly = false,
   stageRef
 }) {
   const wrapRef = useRef(null);
@@ -48,6 +50,7 @@ export default function Canvas({
   const nodes = useRef(new Map());
   const dragState = useRef(null);
   const [guides, setGuides] = useState([]);
+  const [spaces, setSpaces] = useState([]);
   const [marquee, setMarquee] = useState(null);
   const marqueeRef = useRef(null);
   const [shiftDown, setShiftDown] = useState(false);
@@ -57,7 +60,7 @@ export default function Canvas({
   const draftRef = useRef(null);
   const [readout, setReadout] = useState(null);
 
-  const drawing = tool !== "select";
+  const drawing = !readOnly && tool !== "select";
   const upf = doc.scale.unitsPerFoot;
   const notation = doc.scale.feetNotation;
 
@@ -99,7 +102,7 @@ export default function Canvas({
   useEffect(() => {
     const tr = trRef.current;
     if (!tr) return;
-    if (drawing) {
+    if (drawing || readOnly) {
       tr.nodes([]);
       return;
     }
@@ -112,7 +115,7 @@ export default function Canvas({
       });
     tr.nodes(picked);
     tr.getLayer() && tr.getLayer().batchDraw();
-  }, [selectedIds, objects, byId, flagsById, drawing]);
+  }, [selectedIds, objects, byId, flagsById, drawing, readOnly]);
 
   const selectedObjects = selectedIds.map((id) => byId.get(id)).filter(Boolean);
   const onlyText = selectedObjects.length > 0 && selectedObjects.every((o) => o.type === "text");
@@ -120,6 +123,7 @@ export default function Canvas({
   // A single polygon or dimension gets vertex handles rather than relying only
   // on its bounding box.
   const vertexTarget =
+    !readOnly &&
     selectedObjects.length === 1 &&
     (selectedObjects[0].type === "polygon" || selectedObjects[0].type === "dimension") &&
     flagsById.get(selectedObjects[0].id) &&
@@ -170,23 +174,7 @@ export default function Canvas({
 
   /** Edge/centre lines plus polygon vertices, from everything not being dragged. */
   const snapTargets = useCallback(
-    (excludeIds) => {
-      const skip = new Set(excludeIds);
-      const boxes = [];
-      const points = [];
-      for (const o of objects) {
-        if (skip.has(o.id)) continue;
-        const f = flagsById.get(o.id);
-        if (!f || !f.visible) continue;
-        boxes.push(boundsOf(o));
-        if (o.type === "polygon" && Array.isArray(o.points)) {
-          for (let i = 0; i < o.points.length - 1; i += 2) {
-            points.push({ x: o.x + o.points[i], y: o.y + o.points[i + 1] });
-          }
-        }
-      }
-      return { boxes, points };
-    },
+    (excludeIds) => collectSnapTargets(objects, flagsById, excludeIds),
     [objects, flagsById]
   );
 
@@ -322,7 +310,7 @@ export default function Canvas({
     }
 
     if (e.target !== stage) return; // a shape handles its own selection
-    if (e.evt.shiftKey) {
+    if (e.evt.shiftKey && !readOnly) {
       stage.stopDrag();
       marqueeRef.current = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
       setMarquee(marqueeRef.current);
@@ -410,39 +398,22 @@ export default function Canvas({
     if (!st) return;
     const node = e.target;
     const b = node.getClientRect({ relativeTo: node.getLayer() });
-    const tol = SNAP_PX / view.zoom;
-    const found = [];
+    const tol = snapPx / view.zoom;
     let dx = 0;
     let dy = 0;
+    let found = [];
+    let foundSpaces = [];
 
     if (snapEnabled) {
-      const vEdges = [b.x, b.x + b.width / 2, b.x + b.width];
-      const hEdges = [b.y, b.y + b.height / 2, b.y + b.height];
-      let bestV = null;
-      let bestH = null;
-      const tryV = (line) => {
-        for (const edge of vEdges) {
-          const d = line - edge;
-          if (Math.abs(d) <= tol && (!bestV || Math.abs(d) < Math.abs(bestV.d))) bestV = { d, line };
-        }
-      };
-      const tryH = (line) => {
-        for (const edge of hEdges) {
-          const d = line - edge;
-          if (Math.abs(d) <= tol && (!bestH || Math.abs(d) < Math.abs(bestH.d))) bestH = { d, line };
-        }
-      };
-      for (const t of st.targets.boxes) {
-        tryV(t.x); tryV(t.x + t.w / 2); tryV(t.x + t.w);
-        tryH(t.y); tryH(t.y + t.h / 2); tryH(t.y + t.h);
-      }
-      // Section corners are snap targets too, so a block can meet a wall face.
-      for (const p of st.targets.points) {
-        tryV(p.x);
-        tryH(p.y);
-      }
-      if (bestV) { dx = bestV.d; found.push({ orientation: "v", at: bestV.line }); }
-      if (bestH) { dy = bestH.d; found.push({ orientation: "h", at: bestH.line }); }
+      const result = snapBox(
+        { x: b.x, y: b.y, w: b.width, h: b.height },
+        st.targets,
+        tol
+      );
+      dx = result.dx;
+      dy = result.dy;
+      found = result.guides;
+      foundSpaces = result.spacing;
     }
 
     if (gridEnabled && !dx) dx = Math.round(node.x() / gridSize) * gridSize - node.x();
@@ -450,6 +421,7 @@ export default function Canvas({
 
     if (dx || dy) node.position({ x: node.x() + dx, y: node.y() + dy });
     setGuides(found);
+    setSpaces(foundSpaces);
 
     if (st.ids.length > 1) {
       const moved = { x: node.x() - st.lead.x, y: node.y() - st.lead.y };
@@ -475,6 +447,7 @@ export default function Canvas({
     const st = dragState.current;
     dragState.current = null;
     setGuides([]);
+    setSpaces([]);
     setReadout(null);
     if (!st) return;
     const lead = nodes.current.get(st.leadId);
@@ -489,7 +462,10 @@ export default function Canvas({
       prev.map((o) => {
         if (!ids.has(o.id)) return o;
         const from = st.start.get(o.id) || { x: o.x, y: o.y };
-        return { ...o, x: from.x + delta.x, y: from.y + delta.y };
+        const next = { ...o, x: from.x + delta.x, y: from.y + delta.y };
+        // Dragging a dimension yourself means it no longer follows an object.
+        if (next.type === "dimension" && next.anchor) next.anchor = null;
+        return next;
       })
     );
   };
@@ -538,19 +514,29 @@ export default function Canvas({
 
   // ---- Vertex editing -----------------------------------------------------
   const moveVertex = (o, index, world, final) => {
-    let x = world.x - o.x;
-    let y = world.y - o.y;
-    if (gridEnabled) {
-      x = Math.round((o.x + x) / gridSize) * gridSize - o.x;
-      y = Math.round((o.y + y) / gridSize) * gridSize - o.y;
+    let x = world.x;
+    let y = world.y;
+    if (snapEnabled) {
+      const snapped = snapPoint(x, y, snapTargets([o.id]), snapPx / view.zoom);
+      x = snapped.x;
+      y = snapped.y;
+      setGuides(snapped.guides);
     }
+    if (gridEnabled) {
+      x = Math.round(x / gridSize) * gridSize;
+      y = Math.round(y / gridSize) * gridSize;
+    }
+    const lx = x - o.x;
+    const ly = y - o.y;
     const points = o.points.slice();
-    points[index * 2] = x;
-    points[index * 2 + 1] = y;
-    // Coalesce the drag into one history entry; the final commit closes it.
-    onCommit((prev) => prev.map((p) => (p.id === o.id ? { ...p, points } : p)), {
+    points[index * 2] = lx;
+    points[index * 2 + 1] = ly;
+    const patch = { points };
+    if (o.type === "dimension" && o.anchor) patch.anchor = null;
+    onCommit((prev) => prev.map((p) => (p.id === o.id ? { ...p, ...patch } : p)), {
       coalesceKey: final ? null : "vertex:" + o.id + ":" + index
     });
+    if (final) setGuides([]);
   };
 
   const onVertexClick = (o, index) => (e) => {
@@ -560,6 +546,7 @@ export default function Canvas({
   };
 
   const onShapeDblClick = (o) => (e) => {
+    if (readOnly) return;
     const flags = flagsById.get(o.id);
     if (flags && flags.locked) return;
 
@@ -677,12 +664,18 @@ export default function Canvas({
                   key={o.id}
                   o={o}
                   // While a drawing tool is live, existing shapes must not steal
-                  // the pointer from the tool.
-                  flags={drawing ? { ...flags, locked: true } : flags}
+                  // the pointer from the tool. The viewer still needs taps.
+                  flags={drawing ? { ...flags, locked: true } : { ...flags, readOnly }}
                   render={render}
                   isSelected={selectedSet.has(o.id)}
                   onRef={registerRef}
-                  handlers={{
+                  handlers={
+                    readOnly
+                      ? {
+                          onMouseDown: () => selectObject(o.id, false),
+                          onTouchStart: () => selectObject(o.id, false)
+                        }
+                      : {
                     onMouseDown: (e) => {
                       e.cancelBubble = true;
                       selectObject(o.id, e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey);
@@ -698,19 +691,21 @@ export default function Canvas({
                     onDragEnd: endDrag,
                     onTransform,
                     onTransformEnd: endTransform
-                  }}
+                  }
+                  }
                 />
               );
             })}
 
             <Transformer
               ref={trRef}
-              rotateEnabled={!vertexTarget}
+              visible={!readOnly}
+              rotateEnabled={!readOnly && !vertexTarget}
               keepRatio={onlyText || shiftDown}
               centeredScaling={altDown}
               rotationSnaps={snapEnabled && !shiftDown ? ROTATION_SNAPS : []}
               rotationSnapTolerance={7}
-              resizeEnabled={anyResizable || onlyText}
+              resizeEnabled={!readOnly && (anyResizable || onlyText)}
               enabledAnchors={
                 onlyText
                   ? ["top-left", "top-right", "bottom-left", "bottom-right"]
@@ -756,6 +751,19 @@ export default function Canvas({
                 stroke={GUIDE_COLOR}
                 strokeWidth={1 / view.zoom}
                 dash={[4 / view.zoom, 4 / view.zoom]}
+                listening={false}
+              />
+            ))}
+
+            {spaces.map((s, i) => (
+              <Rect
+                key={"sp" + i}
+                x={s.x}
+                y={s.y}
+                width={s.w}
+                height={s.h}
+                fill={GUIDE_COLOR}
+                opacity={0.35}
                 listening={false}
               />
             ))}

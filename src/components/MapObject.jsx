@@ -171,7 +171,9 @@ function DimensionBody({ o, scale }) {
   const notation = (scale && scale.feetNotation) || "decimal";
   const drawnFt = upf ? len / upf : null;
   let text = o.label || "";
-  if (drawnFt !== null) {
+  if (o.manualLabel && o.label) {
+    text = o.label;
+  } else if (drawnFt !== null) {
     text = formatFeet(drawnFt, notation);
     // Surface disagreement rather than hiding it behind the surveyed number.
     if (o.realFt && Math.abs(drawnFt - o.realFt) / o.realFt > 0.02) {
@@ -231,6 +233,7 @@ export default function MapObject({ o, isSelected, onRef, handlers, flags, rende
   const locked = flags ? flags.locked : o.locked;
   if (!visible) return null;
 
+  const readOnly = flags && flags.readOnly;
   const interactive = !locked;
   const shared = {
     id: o.id,
@@ -239,8 +242,8 @@ export default function MapObject({ o, isSelected, onRef, handlers, flags, rende
     y: o.y,
     rotation: o.rotation,
     opacity: o.opacity,
-    draggable: interactive,
-    listening: interactive,
+    draggable: interactive && !readOnly,
+    listening: readOnly || interactive,
     ref: (node) => onRef(o.id, node),
     ...handlers
   };

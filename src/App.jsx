@@ -7,6 +7,7 @@ import LayersPanel from "./components/LayersPanel.jsx";
 import OwnersPanel from "./components/OwnersPanel.jsx";
 import ScalePanel from "./components/ScalePanel.jsx";
 import UnsquashDialog from "./components/UnsquashDialog.jsx";
+import Legend from "./components/Legend.jsx";
 import { useHistory } from "./hooks/useHistory.js";
 import { makeObject, uid } from "./model/objects.js";
 import {
@@ -22,8 +23,9 @@ import {
   parseImport,
   saveDocument
 } from "./model/storage.js";
-import { documentExtent, planUnsquash } from "./model/transforms.js";
+import { applyAnchors, documentExtent, guessOwners, placeDimensionOnEdge, planUnsquash } from "./model/transforms.js";
 import { exportPNG, exportPDF } from "./export/exportMap.js";
+import { exportFamilyPage } from "./export/exportViewer.js";
 
 const GRID_SIZE = 10;
 const AUTOSAVE_MS = 500;
@@ -43,6 +45,7 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [view, setView] = useState({ x: 20, y: 20, zoom: 0.9 });
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [snapPx, setSnapPx] = useState(6);
   const [gridEnabled, setGridEnabled] = useState(false);
   const [colorMode, setColorMode] = useState("natural");
   const [tool, setTool] = useState("select");
@@ -50,6 +53,7 @@ export default function App() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [status, setStatus] = useState("");
   const [unsquash, setUnsquash] = useState(null);
+  const [pdfOpts, setPdfOpts] = useState(null);
   const stageRef = useRef({});
   const firstRun = useRef(true);
 
@@ -87,7 +91,8 @@ export default function App() {
 
   // ---- Commit helpers -----------------------------------------------------
   const commitObjects = useCallback(
-    (fn, opts) => commit((d) => ({ ...d, objects: fn(d.objects) }), opts),
+    (fn, opts) =>
+      commit((d) => ({ ...d, objects: applyAnchors(fn(d.objects)) }), opts),
     [commit]
   );
 
@@ -281,6 +286,22 @@ export default function App() {
     flash("Vertical squash corrected — one Ctrl+Z reverts it", 5000);
   }, [unsquash, doc, commit, flash]);
 
+  const setDimensionAnchor = useCallback(
+    (objectId, edge) => {
+      if (!primary || primary.type !== "dimension") return;
+      commit((d) => ({
+        ...d,
+        objects: d.objects.map((o) => {
+          if (o.id !== primary.id) return o;
+          if (!objectId) return { ...o, anchor: null };
+          const target = d.objects.find((t) => t.id === objectId);
+          return target ? placeDimensionOnEdge(o, target, edge || "bottom") : { ...o, anchor: null };
+        })
+      }));
+    },
+    [commit, primary]
+  );
+
   // ---- View helpers -------------------------------------------------------
   const zoomBy = (factor) => stageRef.current.zoomTo && stageRef.current.zoomTo(view.zoom * factor);
 
@@ -333,17 +354,28 @@ export default function App() {
     flash(res.ok ? "Saved to this browser" : res.error);
   };
 
-  const doExport = async (kind) => {
+  const doExport = async (kind, extra = {}) => {
     const stage = stageRef.current.stage;
     if (!stage) return;
     try {
       flash(kind === "png" ? "Rendering PNG…" : "Building PDF…", 0);
-      if (kind === "png") await exportPNG(doc, { pixelRatio: 2 });
-      else await exportPDF(doc);
+      if (kind === "png") await exportPNG(doc, { pixelRatio: 2, colorMode });
+      else await exportPDF(doc, { colorMode, format: extra.format || "a3" });
       flash("Export ready", 2200);
     } catch (err) {
       console.error(err);
       flash("Export failed: " + (err && err.message), 5000);
+    }
+  };
+
+  const exportFamily = async () => {
+    try {
+      flash("Building family page…", 0);
+      await exportFamilyPage(doc);
+      flash("Family page downloaded", 2200);
+    } catch (err) {
+      console.error(err);
+      flash("Could not export family page: " + (err && err.message), 5000);
     }
   };
 
@@ -429,7 +461,9 @@ export default function App() {
         onSave={saveNow}
         onExportJSON={() => exportDocument(doc)}
         onExportPNG={() => doExport("png")}
-        onExportPDF={() => doExport("pdf")}
+        onExportPDF={() => setPdfOpts({ format: "a3" })}
+        onFamilyPage={exportFamily}
+        onOpenViewer={() => window.open("viewer.html", "_blank")}
         onImport={onImport}
         onReset={resetMap}
         onDelete={deleteSelected}
@@ -441,10 +475,13 @@ export default function App() {
         onToggleGrid={() => setGridEnabled((g) => !g)}
         colorMode={colorMode}
         onToggleColorMode={() => setColorMode((m) => (m === "owner" ? "natural" : "owner"))}
+        snapPx={snapPx}
+        onSnapPx={setSnapPx}
         saveStatus={status}
       />
 
       <main className="workspace">
+        <div className="canvasColumn">
         <Canvas
           doc={doc}
           objects={rendered}
@@ -461,8 +498,11 @@ export default function App() {
           snapEnabled={snapEnabled}
           gridEnabled={gridEnabled}
           gridSize={GRID_SIZE}
+          snapPx={snapPx}
           stageRef={stageRef}
         />
+        <Legend doc={doc} colorMode={colorMode} />
+        </div>
 
         <button
           className={"panelToggle" + (panelOpen ? " shifted" : "")}
@@ -494,6 +534,7 @@ export default function App() {
                   onDuplicate={duplicateSelected}
                   onDelete={deleteSelected}
                   onAssignOwner={assignOwner}
+                  onAnchor={setDimensionAnchor}
                   onClose={() => setSelectedIds([])}
                 />
                 <ObjectList
@@ -532,6 +573,10 @@ export default function App() {
                 onAdd={addOwner}
                 onRemove={removeOwner}
                 onAssign={assignOwner}
+                onGuess={() => {
+                  commitObjects(guessOwners);
+                  flash("Owners guessed from labels", 2200);
+                }}
               />
             )}
 
@@ -550,6 +595,39 @@ export default function App() {
 
       {unsquash && (
         <UnsquashDialog plan={unsquash} onApply={applyUnsquash} onCancel={() => setUnsquash(null)} />
+      )}
+
+      {pdfOpts && (
+        <div className="modalBackdrop" onClick={() => setPdfOpts(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Export PDF</h2>
+            <p className="muted">The sheet is fitted to the page. Pick a size that matches the printer.</p>
+            <label className="field">
+              <span>Page size</span>
+              <select
+                value={pdfOpts.format}
+                onChange={(e) => setPdfOpts({ format: e.target.value })}
+              >
+                <option value="a4">A4</option>
+                <option value="a3">A3</option>
+                <option value="letter">Letter</option>
+              </select>
+            </label>
+            <div className="btnRow">
+              <button onClick={() => setPdfOpts(null)}>Cancel</button>
+              <button
+                className="primary"
+                onClick={() => {
+                  const format = pdfOpts.format;
+                  setPdfOpts(null);
+                  doExport("pdf", { format });
+                }}
+              >
+                Export
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="status">

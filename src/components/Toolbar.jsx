@@ -45,6 +45,10 @@ export default function Toolbar({
   onToggleGrid,
   colorMode,
   onToggleColorMode,
+  snapPx = 6,
+  onSnapPx,
+  onFamilyPage,
+  onOpenViewer,
   saveStatus
 }) {
   return (
@@ -90,12 +94,24 @@ export default function Toolbar({
         <button className={colorMode === "owner" ? "active" : ""} onClick={onToggleColorMode} title="Colour every section by its owner">
           🎨 By owner
         </button>
+        <input
+          className="snapPx"
+          type="number"
+          min={2}
+          max={24}
+          step={1}
+          value={snapPx}
+          title="Snap distance in screen pixels"
+          onChange={(e) => onSnapPx && onSnapPx(Math.max(2, Math.min(24, +e.target.value || 6)))}
+        />
       </div>
 
       <div className="group">
         <button onClick={onSave} title="Flush to browser storage now">Save</button>
         <button onClick={onExportPNG} title="Image of the whole map with legend and scale bar">PNG</button>
         <button onClick={onExportPDF} title="Printable PDF at true scale">PDF</button>
+        <button onClick={onFamilyPage} title="Self-contained page the family can open on a phone">Family page</button>
+        <button onClick={onOpenViewer} title="Open the read-only viewer">View</button>
         <button onClick={onExportJSON}>JSON</button>
         <label className="fileBtn">
           Import

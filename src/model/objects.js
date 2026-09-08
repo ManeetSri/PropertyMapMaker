@@ -32,7 +32,7 @@ export const TYPE_DEFAULTS = {
   },
   dimension: {
     stroke: "#222222", strokeWidth: 2, fontSize: 14, label: "", offset: 14,
-    points: [0, 0, 200, 0], realFt: null, anchor: null
+    points: [0, 0, 200, 0], realFt: null, anchor: null, manualLabel: false
   }
 };
 
@@ -113,7 +113,10 @@ export function normalize(raw) {
     locked: raw.locked === true,
     visible: raw.visible !== false,
     owner: typeof raw.owner === "string" && raw.owner ? raw.owner : null,
-    layer: str(raw.layer, "") || LAYER_FOR_TYPE[type] || "buildings"
+    layer: str(raw.layer, "") || LAYER_FOR_TYPE[type] || "buildings",
+    surveyW: Number.isFinite(+raw.surveyW) && +raw.surveyW > 0 ? +raw.surveyW : null,
+    surveyH: Number.isFinite(+raw.surveyH) && +raw.surveyH > 0 ? +raw.surveyH : null,
+    surveyArea: Number.isFinite(+raw.surveyArea) && +raw.surveyArea > 0 ? +raw.surveyArea : null
   };
 
   if (type === "line") {
@@ -145,6 +148,7 @@ export function normalize(raw) {
     // The measured truth from the survey, when known. Kept separate from the
     // drawn length so the two can be compared instead of silently agreeing.
     o.realFt = Number.isFinite(+raw.realFt) && +raw.realFt > 0 ? +raw.realFt : null;
+    o.manualLabel = raw.manualLabel === true;
     o.anchor =
       raw.anchor && typeof raw.anchor === "object" && typeof raw.anchor.objectId === "string"
         ? { objectId: raw.anchor.objectId, edge: str(raw.anchor.edge, "bottom") }

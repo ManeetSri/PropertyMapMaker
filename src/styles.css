@@ -55,6 +55,8 @@ button:disabled { opacity: .45; cursor: default; }
 
 .workspace { flex: 1 1 auto; position: relative; display: flex; min-height: 0; overflow: hidden; }
 
+.canvasColumn { flex: 1 1 auto; position: relative; min-width: 0; display: flex; }
+
 .canvasWrap { flex: 1 1 auto; position: relative; background: #dfe3e7; min-width: 0; }
 .canvasWrap canvas { display: block; }
 
@@ -161,9 +163,196 @@ button:disabled { opacity: .45; cursor: default; }
 .crash { padding: 40px; max-width: 620px; font-size: 14px; }
 .crash pre { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 10px; white-space: pre-wrap; }
 
+.muted { font-size: 12px; color: var(--muted); margin: 8px 0; line-height: 1.4; }
+.warn { font-size: 12px; color: #9a3b12; background: #fff3e8; border-radius: 6px; padding: 7px 8px; margin: 8px 0; line-height: 1.4; }
+.ok { font-size: 12px; color: #216c38; background: #e7f6eb; border-radius: 6px; padding: 7px 8px; margin: 8px 0; }
+
+.panel h4 { margin: 14px 0 4px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.panelTabs { display: flex; gap: 4px; margin: -4px 0 2px; }
+.panelTabs button { flex: 1 1 0; padding: 6px 4px; font-size: 12px; }
+
+.field select {
+  width: 100%;
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 3px 0;
+}
+.totalRow.strong { color: var(--ink); font-weight: 600; }
+
+.readout {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  background: #eef4fb;
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.rowList { list-style: none; margin: 0; padding: 0; }
+.rowList li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid #eef1f4;
+  padding: 3px 0;
+}
+.rowList .rowMain { padding: 4px 4px; }
+.rowInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.swatch { width: 28px; height: 24px; padding: 1px; border: 1px solid var(--line); border-radius: 4px; background: #fff; cursor: pointer; }
+.errBadge { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--muted); flex: 0 0 auto; }
+.errBadge.bad { color: #a11; font-weight: 600; }
+
+.btnRow .primary, button.primary {
+  background: #1677ff;
+  border-color: #0f62d8;
+  color: #fff;
+}
+.btnRow .primary:hover, button.primary:hover { background: #0f62d8; }
+
+.canvasWrap.drawing { cursor: crosshair; }
+
+.readoutBadge {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+  background: #17202a;
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  transform: translate(0, 0);
+}
+
+.legend {
+  position: absolute;
+  left: 10px;
+  bottom: 44px;
+  z-index: 3;
+  background: #fffc;
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 160px;
+  max-width: 240px;
+  pointer-events: none;
+}
+.legend h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.legendRow { display: flex; align-items: center; gap: 7px; font-size: 12px; margin: 3px 0; }
+.legendSwatch { width: 12px; height: 12px; border-radius: 2px; border: 1px solid #8a929a; flex: 0 0 auto; }
+.legendName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legendArea { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.surveyRow { display: flex; gap: 4px; align-items: center; padding: 0 0 6px 6px; }
+.surveyRow input {
+  width: 58px;
+  padding: 3px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.snapPx {
+  width: 52px;
+  padding: 5px 6px;
+  border: 1px solid #b9c2cc;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: #17202a55;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 22px;
+  max-width: 460px;
+  width: 100%;
+  box-shadow: 0 12px 40px #0003;
+}
+.modal h2 { margin: 0 0 8px; font-size: 18px; }
+.previewRow { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 16px 0; }
+.previewBox { margin: 0; text-align: center; }
+.previewShape { background: #c5d6ea; border: 1px solid #7a93b0; margin: 0 auto 6px; }
+.previewBox figcaption { font-size: 11px; color: var(--muted); }
+.previewArrow { font-size: 22px; color: var(--muted); }
+
+.tapCard {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 3;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 180px;
+  max-width: 260px;
+  box-shadow: 0 4px 16px #0002;
+}
+.tapCard h3 { margin: 0 0 4px; font-size: 14px; }
+.tapCard p { margin: 2px 0; font-size: 12px; color: var(--muted); }
+
+.viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #eef1f4;
+}
+.viewerBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  border-bottom: 1px solid #cbd2d9;
+  flex-wrap: wrap;
+}
+.viewerBar h1 { margin: 0; font-size: 16px; flex: 1 1 auto; }
+.viewerStage { flex: 1 1 auto; min-height: 0; position: relative; }
+
+@media print {
+  .viewerBar, .panelToggle, .toolbar, .panel, .status, .tapCard { display: none !important; }
+  .app, .viewer, .workspace, .viewerStage, .canvasWrap { height: auto !important; overflow: visible !important; }
+  .legend { position: static; pointer-events: none; }
+}
+
 /* Narrow windows: keep the side panel from eating the canvas. */
 @media (max-width: 860px) {
   .panel { flex-basis: 236px; padding: 9px; }
   .panelToggle.shifted { right: 236px; }
   .status { max-width: 88vw; font-size: 11px; padding: 5px 8px; }
+  .legend { max-width: 46vw; }
 }

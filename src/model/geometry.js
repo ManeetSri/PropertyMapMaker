@@ -30,7 +30,7 @@ export function distance(x1, y1, x2, y2) {
 }
 
 /** Perpendicular distance from (px,py) to the segment (x1,y1)-(x2,y2). */
-function pointSegmentDistance(px, py, x1, y1, x2, y2) {
+export function pointSegmentDistance(px, py, x1, y1, x2, y2) {
   const dx = x2 - x1;
   const dy = y2 - y1;
   const lenSq = dx * dx + dy * dy;
@@ -177,4 +177,21 @@ export function toFeet(units, unitsPerFoot) {
 
 export function toSquareFeet(squareUnits, unitsPerFoot) {
   return unitsPerFoot > 0 ? squareUnits / (unitsPerFoot * unitsPerFoot) : 0;
+}
+
+/** Ray-cast hit test on a flat [x0,y0,...] ring. */
+export function pointInPolygon(points, x, y) {
+  if (!Array.isArray(points) || points.length < 6) return false;
+  const n = Math.floor(points.length / 2);
+  let inside = false;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = points[i * 2];
+    const yi = points[i * 2 + 1];
+    const xj = points[j * 2];
+    const yj = points[j * 2 + 1];
+    const denom = yj - yi || 1e-12;
+    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / denom + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }

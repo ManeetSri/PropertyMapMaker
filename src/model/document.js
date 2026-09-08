@@ -263,3 +263,17 @@ export function impliedScales(doc) {
     squashFactor: h && v ? h / v : null
   };
 }
+
+/** Re-read every dimension's original label under the chosen 29.10 convention. */
+export function applyFeetNotation(doc, feetNotation) {
+  const dotted = feetNotation === "ftin";
+  return normalizeDocument({
+    ...doc,
+    scale: { ...doc.scale, feetNotation },
+    objects: doc.objects.map((o) => {
+      if (o.type !== "dimension" || !o.label) return o;
+      const ft = parseFeet(o.label, dotted);
+      return ft && ft > 0 ? { ...o, realFt: ft } : o;
+    })
+  });
+}

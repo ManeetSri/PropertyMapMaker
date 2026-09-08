@@ -6,7 +6,7 @@
 import Konva from "konva";
 import { orderedObjects, effectiveFlags, areaByOwner } from "../model/document.js";
 import { boundsOf } from "../model/objects.js";
-import { formatArea, formatFeet, toFeet } from "../model/geometry.js";
+import { formatArea, formatFeet } from "../model/geometry.js";
 import { documentExtent } from "../model/transforms.js";
 
 const MARGIN = 40;
@@ -19,6 +19,40 @@ function ownerFill(o, doc, colorMode) {
   return owner ? owner.color : o.fill;
 }
 
+function shade(hex, amount) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = clamp(((n >> 16) & 255) * amount);
+  const g = clamp(((n >> 8) & 255) * amount);
+  const b = clamp((n & 255) * amount);
+  return "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
+function drawSpecial(group, o, fill) {
+  const { w, h } = o;
+  if (o.type === "tree") {
+    const trunkW = Math.max(2, w * 0.11);
+    group.add(new Konva.Rect({ x: w / 2 - trunkW / 2, y: h * 0.58, width: trunkW, height: h * 0.42, fill: "#7b5536" }));
+    group.add(new Konva.Circle({ x: w / 2, y: h * 0.36, radius: Math.min(w, h) * 0.3, fill, stroke: o.stroke, strokeWidth: o.strokeWidth }));
+    return;
+  }
+  if (o.type === "table") {
+    group.add(new Konva.Circle({ x: w / 2, y: h / 2, radius: Math.min(w, h) * 0.29, fill, stroke: o.stroke, strokeWidth: o.strokeWidth }));
+    return;
+  }
+  if (o.type === "temple") {
+    group.add(new Konva.Rect({ x: w * 0.08, y: h * 0.45, width: w * 0.84, height: h * 0.55, fill, stroke: o.stroke, strokeWidth: o.strokeWidth }));
+    group.add(new Konva.Line({
+      points: [w / 2, h * 0.08, w * 0.02, h * 0.5, w * 0.98, h * 0.5],
+      closed: true, fill: shade(fill, 0.82), stroke: o.stroke, strokeWidth: o.strokeWidth
+    }));
+    return;
+  }
+  group.add(new Konva.Rect({ width: w, height: h, fill, stroke: o.stroke, strokeWidth: o.strokeWidth }));
+}
+
 /**
  * Rebuild the map with plain Konva rather than reusing the React components:
  * the export needs no interactivity, and this keeps it independent of the
@@ -29,6 +63,7 @@ function drawObjects(layer, doc, colorMode) {
     const flags = effectiveFlags(doc, o);
     if (!flags.visible) continue;
     const group = new Konva.Group({ x: o.x, y: o.y, rotation: o.rotation, opacity: o.opacity });
+    const fill = ownerFill(o, doc, colorMode);
 
     if (o.type === "text") {
       group.add(new Konva.Text({ text: o.label || "", fontSize: o.fontSize, fill: o.fill }));
@@ -39,7 +74,7 @@ function drawObjects(layer, doc, colorMode) {
       }));
     } else if (o.type === "polygon") {
       group.add(new Konva.Line({
-        points: o.points, closed: true, fill: ownerFill(o, doc, colorMode),
+        points: o.points, closed: true, fill,
         stroke: o.stroke, strokeWidth: o.strokeWidth
       }));
       if (o.showLabel && o.label) {
@@ -52,9 +87,11 @@ function drawObjects(layer, doc, colorMode) {
       }
     } else if (o.type === "dimension") {
       drawDimension(group, o, doc.scale);
+    } else if (o.type === "tree" || o.type === "table" || o.type === "temple" || o.type === "wall") {
+      drawSpecial(group, o, fill);
     } else {
       group.add(new Konva.Rect({
-        width: o.w, height: o.h, fill: ownerFill(o, doc, colorMode),
+        width: o.w, height: o.h, fill,
         stroke: o.stroke, strokeWidth: o.strokeWidth
       }));
       if (o.type === "rect" && o.showLabel && o.label) {
@@ -79,12 +116,29 @@ function drawDimension(group, o, scale) {
   const off = o.offset || 0;
   const a = { x: x1 + nx * off, y: y1 + ny * off };
   const b = { x: x2 + nx * off, y: y2 + ny * off };
+  const head = Math.max(6, o.strokeWidth * 3);
+  const ux = dx / len;
+  const uy = dy / len;
   group.add(new Konva.Line({ points: [x1, y1, a.x, a.y], stroke: o.stroke, strokeWidth: 1, dash: [3, 3] }));
   group.add(new Konva.Line({ points: [x2, y2, b.x, b.y], stroke: o.stroke, strokeWidth: 1, dash: [3, 3] }));
   group.add(new Konva.Line({ points: [a.x, a.y, b.x, b.y], stroke: o.stroke, strokeWidth: o.strokeWidth }));
+  group.add(new Konva.Line({
+    points: [a.x + ux * head + nx * head * 0.35, a.y + uy * head + ny * head * 0.35, a.x, a.y, a.x + ux * head - nx * head * 0.35, a.y + uy * head - ny * head * 0.35],
+    stroke: o.stroke, strokeWidth: o.strokeWidth
+  }));
+  group.add(new Konva.Line({
+    points: [b.x - ux * head + nx * head * 0.35, b.y - uy * head + ny * head * 0.35, b.x, b.y, b.x - ux * head - nx * head * 0.35, b.y - uy * head - ny * head * 0.35],
+    stroke: o.stroke, strokeWidth: o.strokeWidth
+  }));
 
   const upf = scale && scale.unitsPerFoot;
-  const text = upf ? formatFeet(len / upf, scale.feetNotation) : o.label || "";
+  const notation = (scale && scale.feetNotation) || "decimal";
+  const drawnFt = upf ? len / upf : null;
+  let text = o.label || "";
+  if (o.manualLabel && o.label) text = o.label;
+  else if (drawnFt !== null) text = formatFeet(drawnFt, notation);
+  else if (o.realFt) text = formatFeet(o.realFt, notation);
+
   let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
   if (angle > 90 || angle < -90) angle += 180;
   const w = Math.max(60, text.length * o.fontSize * 0.6);

@@ -13,6 +13,7 @@ export default function Inspector({
   onDuplicate,
   onDelete,
   onAssignOwner,
+  onAnchor,
   onClose
 }) {
   if (!selected) {
@@ -103,6 +104,45 @@ export default function Inspector({
             onCommit={(realFt) => onPatch({ realFt: realFt > 0 ? realFt : null })}
           />
           <NumberField label="Offset" value={selected.offset} onCommit={(offset) => onPatch({ offset })} />
+          <label className="checkRow">
+            <input
+              type="checkbox"
+              checked={!!selected.manualLabel}
+              onChange={(e) => onPatch({ manualLabel: e.target.checked })}
+            />
+            <span>Override auto label</span>
+          </label>
+          {selected.manualLabel && (
+            <p className="muted">The Label field above is drawn as-is instead of the measured length.</p>
+          )}
+          <label className="field">
+            <span>Follow object edge</span>
+            <select
+              value={selected.anchor ? selected.anchor.objectId : ""}
+              onChange={(e) => onAnchor && onAnchor(e.target.value || null, (selected.anchor && selected.anchor.edge) || "bottom")}
+            >
+              <option value="">Not attached</option>
+              {doc.objects
+                .filter((o) => o.id !== selected.id && o.id !== "bg-sheet" && (o.w || o.type === "polygon"))
+                .map((o) => (
+                  <option key={o.id} value={o.id}>{o.label || o.id}</option>
+                ))}
+            </select>
+          </label>
+          {selected.anchor && (
+            <label className="field">
+              <span>Edge</span>
+              <select
+                value={selected.anchor.edge}
+                onChange={(e) => onAnchor && onAnchor(selected.anchor.objectId, e.target.value)}
+              >
+                <option value="top">Top</option>
+                <option value="right">Right</option>
+                <option value="bottom">Bottom</option>
+                <option value="left">Left</option>
+              </select>
+            </label>
+          )}
         </>
       )}
 

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "vite build && vite build --config vite.viewer.config.js",
+    "preview": "vite preview",
+    "test:model": "node scripts/check-model.mjs"
   },
   "dependencies": {
     "jspdf": "^4.2.1",

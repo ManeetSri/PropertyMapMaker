@@ -15,7 +15,8 @@ export default function OwnersPanel({
   onUpdate,
   onAdd,
   onRemove,
-  onAssign
+  onAssign,
+  onGuess
 }) {
   const { totals, unassigned, calibrated } = areaByOwner(doc);
   const grand = [...totals.values()].reduce((a, b) => a + b, 0) + unassigned;
@@ -78,6 +79,13 @@ export default function OwnersPanel({
         <button onClick={onAdd}>＋ Add owner</button>
         <button disabled={!selectedIds.length} onClick={() => onAssign(null)}>Clear on selection</button>
       </div>
+      {onGuess && (
+        <div className="btnRow">
+          <button onClick={onGuess} title="Set owners from labels such as Anurag, Ratnesh, Road, Garden">
+            Guess from labels
+          </button>
+        </div>
+      )}
     </section>
   );
 }

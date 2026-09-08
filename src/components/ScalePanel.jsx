@@ -1,8 +1,16 @@
 import React, { useState } from "react";
-import { impliedScales } from "../model/document.js";
-import { formatFeet, parseFeet, round } from "../model/geometry.js";
-import { calibrateFrom, normalizeScaleTo, residualError } from "../model/transforms.js";
+import { applyFeetNotation, impliedScales } from "../model/document.js";
+import { formatArea, formatFeet, parseFeet, round } from "../model/geometry.js";
 import { dimensionLength } from "../model/objects.js";
+import {
+  blockResiduals,
+  calibrateFrom,
+  fitObjectToReal,
+  normalizeScaleTo,
+  residualError,
+  scalePolygonToArea,
+  applyAnchors
+} from "../model/transforms.js";
 
 /**
  * Everything about turning the drawing into a measurable plan: what scale the
@@ -15,6 +23,7 @@ export default function ScalePanel({ doc, onCommit, onUnsquash, onSelect, onFlas
   const scale = doc.scale;
   const implied = impliedScales(doc);
   const residual = residualError(doc);
+  const blocks = blockResiduals(doc);
   const dims = doc.objects.filter((o) => o.type === "dimension");
   const dotted = scale.feetNotation === "ftin";
 
@@ -28,11 +37,22 @@ export default function ScalePanel({ doc, onCommit, onUnsquash, onSelect, onFlas
     onFlash(`Scale set from ${pick}`, 2500);
   };
 
+  const patchObject = (id, patch) =>
+    onCommit((d) => ({ ...d, objects: d.objects.map((o) => (o.id === id ? { ...o, ...patch } : o)) }));
+
   return (
     <section className="panelSection">
       <div className="panelHead">
         <h3>Scale</h3>
       </div>
+
+      <label className="field">
+        <span>Title</span>
+        <input
+          value={doc.title}
+          onChange={(e) => onCommit((d) => ({ ...d, title: e.target.value }), { coalesceKey: "title" })}
+        />
+      </label>
 
       <div className="totalRow strong">
         <span>Units per foot</span>
@@ -43,9 +63,7 @@ export default function ScalePanel({ doc, onCommit, onUnsquash, onSelect, onFlas
         <span>How "29.10" should be read</span>
         <select
           value={scale.feetNotation}
-          onChange={(e) =>
-            onCommit((d) => ({ ...d, scale: { ...d.scale, feetNotation: e.target.value } }))
-          }
+          onChange={(e) => onCommit((d) => applyFeetNotation(d, e.target.value))}
         >
           <option value="decimal">29.10 = 29.1 feet (decimal)</option>
           <option value="ftin">29.10 = 29 feet 10 inches</option>
@@ -144,6 +162,90 @@ export default function ScalePanel({ doc, onCommit, onUnsquash, onSelect, onFlas
             </li>
           ))}
         </ul>
+      )}
+
+      <h4>4 · Scale check</h4>
+      {!scale.unitsPerFoot ? (
+        <p className="muted">Set a scale, then type each block's real size to build a correction list.</p>
+      ) : (
+        <>
+          <p className="muted">Drawn size vs the survey size you enter. Sorted by error. Click a row to select it.</p>
+          <ul className="rowList">
+            {blocks.map((r) => (
+              <li key={r.id} style={{ flexWrap: "wrap" }}>
+                <button className="rowMain" onClick={() => onSelect(r.id)}>
+                  <span className="rowLabel">{r.label || r.id}</span>
+                  <span className="rowType">
+                    {r.kind === "area"
+                      ? formatArea(r.drawnArea)
+                      : `${formatFeet(r.drawnW, scale.feetNotation)} × ${formatFeet(r.drawnH, scale.feetNotation)}`}
+                  </span>
+                </button>
+                {r.hasSurvey && (
+                  <span className={"errBadge" + (Math.abs(r.errorPct) > 5 ? " bad" : "")}>
+                    {r.errorPct > 0 ? "+" : ""}{r.errorPct}%
+                  </span>
+                )}
+                <div className="surveyRow">
+                  {r.kind === "area" ? (
+                    <input
+                      type="number"
+                      step="1"
+                      placeholder="sq ft"
+                      defaultValue={r.surveyArea || ""}
+                      onBlur={(e) => {
+                        const v = parseFloat(e.target.value);
+                        patchObject(r.id, { surveyArea: v > 0 ? v : null });
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="W ft"
+                        defaultValue={r.surveyW || ""}
+                        onBlur={(e) => {
+                          const v = parseFloat(e.target.value);
+                          patchObject(r.id, { surveyW: v > 0 ? v : null });
+                        }}
+                      />
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="H ft"
+                        defaultValue={r.surveyH || ""}
+                        onBlur={(e) => {
+                          const v = parseFloat(e.target.value);
+                          patchObject(r.id, { surveyH: v > 0 ? v : null });
+                        }}
+                      />
+                    </>
+                  )}
+                  <button
+                    disabled={!r.hasSurvey}
+                    title="Resize this object to the surveyed size"
+                      onClick={() => {
+                      onCommit((d) => ({
+                        ...d,
+                        objects: applyAnchors(
+                          d.objects.map((o) => {
+                            if (o.id !== r.id) return o;
+                            if (o.type === "polygon") return scalePolygonToArea(o, d.scale.unitsPerFoot, o.surveyArea);
+                            return fitObjectToReal(o, d.scale.unitsPerFoot, o.surveyW, o.surveyH);
+                          })
+                        )
+                      }));
+                      onFlash("Fitted to surveyed size", 1800);
+                    }}
+                  >
+                    Fit
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );

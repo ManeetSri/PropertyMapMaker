@@ -2,8 +2,8 @@
 // previewed, tested, and applied as a single undoable commit.
 
 import { impliedScales, normalizeDocument } from "./document.js";
-import { boundsOf, dimensionLength } from "./objects.js";
-import { round } from "./geometry.js";
+import { areaOf, boundsOf, dimensionLength } from "./objects.js";
+import { polygonBounds, round, toSquareFeet } from "./geometry.js";
 
 const POINT_TYPES = new Set(["line", "polygon", "dimension"]);
 const SIZED_TYPES = new Set(["rect", "tree", "table", "wall", "temple"]);
@@ -123,6 +123,124 @@ export function residualError(doc) {
       };
     })
     .sort((a, b) => Math.abs(b.errorPct) - Math.abs(a.errorPct));
+}
+
+/**
+ * Place a dimension along one edge of `target`. The dimension then follows
+ * that object through later moves and resizes via applyAnchors().
+ */
+export function placeDimensionOnEdge(dim, target, edge) {
+  const b = boundsOf(target);
+  let x1;
+  let y1;
+  let x2;
+  let y2;
+  if (edge === "top") {
+    x1 = b.x; y1 = b.y; x2 = b.x + b.w; y2 = b.y;
+  } else if (edge === "left") {
+    x1 = b.x; y1 = b.y; x2 = b.x; y2 = b.y + b.h;
+  } else if (edge === "right") {
+    x1 = b.x + b.w; y1 = b.y; x2 = b.x + b.w; y2 = b.y + b.h;
+  } else {
+    x1 = b.x; y1 = b.y + b.h; x2 = b.x + b.w; y2 = b.y + b.h;
+  }
+  return {
+    ...dim,
+    x: x1,
+    y: y1,
+    points: [0, 0, x2 - x1, y2 - y1],
+    anchor: { objectId: target.id, edge }
+  };
+}
+
+/** Recompute every anchored dimension from its target's current bounds. */
+export function applyAnchors(objects, skipIds) {
+  const skip = skipIds instanceof Set ? skipIds : new Set(skipIds || []);
+  const byId = new Map(objects.map((o) => [o.id, o]));
+  return objects.map((o) => {
+    if (o.type !== "dimension" || !o.anchor || skip.has(o.id)) return o;
+    const target = byId.get(o.anchor.objectId);
+    if (!target) return { ...o, anchor: null };
+    return placeDimensionOnEdge(o, target, o.anchor.edge);
+  });
+}
+
+/** Scale Check worklist: drawn size vs the survey size typed on each block. */
+export function blockResiduals(doc) {
+  const upf = doc.scale.unitsPerFoot;
+  if (!upf) return [];
+  const rows = [];
+  for (const o of doc.objects) {
+    if (o.id === "bg-sheet" || o.id === "bg-plot") continue;
+    const area = areaOf(o);
+    if (!area) continue;
+    if (o.type === "polygon") {
+      const drawnArea = toSquareFeet(area, upf);
+      const hasSurvey = o.surveyArea > 0;
+      rows.push({
+        id: o.id,
+        label: o.label,
+        kind: "area",
+        drawnArea: round(drawnArea, 1),
+        surveyArea: o.surveyArea,
+        errorPct: hasSurvey ? round(((drawnArea - o.surveyArea) / o.surveyArea) * 100, 1) : 0,
+        hasSurvey
+      });
+      continue;
+    }
+    if (!o.w || !o.h) continue;
+    const drawnW = o.w / upf;
+    const drawnH = o.h / upf;
+    const hasSurvey = o.surveyW > 0 || o.surveyH > 0;
+    let errorPct = 0;
+    if (o.surveyW > 0) errorPct = Math.max(errorPct, Math.abs((drawnW - o.surveyW) / o.surveyW) * 100);
+    if (o.surveyH > 0) errorPct = Math.max(errorPct, Math.abs((drawnH - o.surveyH) / o.surveyH) * 100);
+    rows.push({
+      id: o.id,
+      label: o.label,
+      kind: "size",
+      drawnW: round(drawnW, 2),
+      drawnH: round(drawnH, 2),
+      surveyW: o.surveyW,
+      surveyH: o.surveyH,
+      errorPct: round(errorPct, 1),
+      hasSurvey
+    });
+  }
+  return rows.sort((a, b) => {
+    if (a.hasSurvey !== b.hasSurvey) return a.hasSurvey ? -1 : 1;
+    return Math.abs(b.errorPct) - Math.abs(a.errorPct);
+  });
+}
+
+/** Grow/shrink a polygon about its centre so its area matches surveyArea. */
+export function scalePolygonToArea(o, unitsPerFoot, surveyArea) {
+  const current = toSquareFeet(areaOf(o), unitsPerFoot);
+  if (!current || !surveyArea || surveyArea <= 0) return o;
+  const k = Math.sqrt(surveyArea / current);
+  const b = polygonBounds(o.points);
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  return {
+    ...o,
+    points: o.points.map((p, i) => (i % 2 === 0 ? cx + (p - cx) * k : cy + (p - cy) * k))
+  };
+}
+
+/** Assign owners from labels so colour-by-owner is useful without a manual pass. */
+export function guessOwners(objects) {
+  return objects.map((o) => {
+    if (o.id === "bg-sheet" || o.id === "bg-plot") return o;
+    const l = o.label || "";
+    if (/anurag/i.test(l)) return { ...o, owner: "anurag" };
+    if (/ratnesh/i.test(l)) return { ...o, owner: "ratnesh" };
+    if (/\broad\b/i.test(l)) return { ...o, owner: "road" };
+    if (/garden|open area|trees|open \/ plot/i.test(l)) return { ...o, owner: "garden" };
+    if (/angan|gate|naal|wash|kitchen|store|parlour|mum|\broom\b|mandir|temple|baithak/i.test(l)) {
+      return { ...o, owner: "common" };
+    }
+    return o;
+  });
 }
 
 /** Resize one object to a real-world size, keeping its top-left anchored. */
